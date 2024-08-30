@@ -1,0 +1,6 @@
+﻿  GameEngineSubsystem.cpp
+  MyGameEngine.cpp
+C:\Users\damia\Downloads\CI517_Assessment\CI517 Source Code\MyGameEngine\MyGameEngine\MyGameEngine.cpp(115,24): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+C:\Users\damia\Downloads\CI517_Assessment\CI517 Source Code\MyGameEngine\MyGameEngine\MyGameEngine.cpp(116,24): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+  Generating Code...
+  MyGameEngine.vcxproj -> C:\Users\damia\Downloads\CI517_Assessment\CI517 Source Code\MyGameEngine\x64\Debug\MyGameEngine.exe
