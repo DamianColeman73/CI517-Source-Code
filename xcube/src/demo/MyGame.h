@@ -17,7 +17,6 @@ struct GameKey {
 
 class MyGame : public AbstractGame {
 private:
-
 	static const int MAZE_ROWS = 19;
 	static const int MAZE_COLS = 20;
 	static const int CELL_SIZE = 30;
@@ -33,8 +32,7 @@ private:
 	Rect quitButton; // Rectangle for the Quit button
 	bool quitGame;   // Flag to quit the game
 
-	/* GAMEPLAY */
-	int score, numKeys, lives;
+	int score, numKeys, lives; /* GAMEPLAY */
 	bool gameWon;
 
 	void handleKeyEvents();
@@ -45,5 +43,4 @@ public:
 	MyGame();
 	~MyGame();
 };
-
 #endif

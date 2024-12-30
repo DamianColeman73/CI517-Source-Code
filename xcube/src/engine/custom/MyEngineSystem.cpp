@@ -7,70 +7,210 @@ MyGame.cpp*/
 //MyEngineSystem.cpp
 #include "MyEngineSystem.h"
 #include "../../demo/MyGame.h"
+#include "../GraphicsEngine.h"
+#include "../ResourceManager.h"
 #include <cstdlib>
 #include <ctime>
+#include <cmath>
+#include <unordered_set>
 
-void MyEngineSystem::spawnEasterEgg(const std::vector<std::vector<int>>& maze, int cellSize) {
-	srand(static_cast<unsigned int>(time(0)));
-	int row, col;
-	do {
-		row = rand() % (maze.size() - 2) + 1; // Avoid edges
-		col = rand() % (maze[0].size() - 2) + 1;
-	} while (maze[row][col] != 0);
-
-	easterEgg.pos = Point2(col * cellSize + cellSize / 2, row * cellSize + cellSize / 2);
-	easterEgg.isCollected = false;
-	easterEgg.messageTimer = 0;
+bool operator==(const Point2& lhs, const Point2& rhs) { // Add the operator== for Point2 here
+    return lhs.x == rhs.x && lhs.y == rhs.y;
 }
 
-void MyEngineSystem::handleEasterEggCollection(const SDL_Rect& playerBox, int& score) {
-	SDL_Rect eggRect = { easterEgg.pos.x - 10, easterEgg.pos.y - 10, 20, 20 };
-	if (!easterEgg.isCollected && SDL_HasIntersection(&playerBox, &eggRect)) {
-		easterEgg.isCollected = true;
-		easterEgg.messageTimer = SDL_GetTicks(); // Start the timer
-		score += 500; // Bonus score for collecting the EasterEgg
-	}
+void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>>& maze, const Point2& boxPos, int minDistance, int numEnemies) {
+    srand(static_cast<unsigned int>(time(0)));
+    enemyPositions.clear();
+    enemyPaths.clear();
+    enemyPathIndices.clear();
+    enemyMoveCounters.clear(); // Initialize the move counters
+    enemyMoveSpeeds.clear(); // Initialize the move speeds
+
+    auto isTooClose = [](const Point2& a, const Point2& b) {
+        return std::abs(a.x - b.x) < 2 && std::abs(a.y - b.y) < 2;
+        };
+
+    for (int i = 0; i < numEnemies; ++i) {
+        int row, col;
+        bool validPosition;
+        do {
+            validPosition = true;
+            row = rand() % (maze.size() - 2) + 1; // Avoid edges
+            col = rand() % (maze[0].size() - 2) + 1;
+            Point2 newPos(col, row);
+            if (maze[row][col] != 0 || std::abs(row - boxPos.y) + std::abs(col - boxPos.x) < minDistance) {
+                validPosition = false;
+            }
+            else {
+                for (const auto& pos : enemyPositions) {
+                    if (isTooClose(pos, newPos) || pos == newPos) {
+                        validPosition = false;
+                        break;
+                    }
+                }
+            }
+        } while (!validPosition);
+        enemyPositions.push_back(Point2(col, row));
+        enemyPaths.push_back({});
+        enemyPathIndices.push_back(0);
+        enemyMoveCounters.push_back(0); // Initialize the move counter for each enemy
+        enemyMoveSpeeds.push_back(rand() % 5 + 1); // Assign a random movement speed for each enemy (1 to 5)
+    }
+}
+
+int heuristic(const Point2& a, const Point2& b) {
+    return std::abs(a.x - b.x) + std::abs(a.y - b.y);
+}
+
+std::vector<Point2> MyEngineSystem::findPath(const Point2& start, const Point2& goal, const std::vector<std::vector<int>>& maze) {
+    std::priority_queue<Node*, std::vector<Node*>, CompareNode> openSet;
+    std::unordered_map<int, Node*> allNodes;
+    std::unordered_set<int> closedSet;
+
+    auto hash = [](const Point2& p) { return p.y * 1000 + p.x; };
+
+    Node* startNode = new Node(start, 0, heuristic(start, goal));
+    openSet.push(startNode);
+    allNodes[hash(start)] = startNode;
+
+    while (!openSet.empty()) {
+        Node* current = openSet.top();
+        openSet.pop();
+
+        if (current->pos == goal) {
+            std::vector<Point2> path = reconstructPath(current);
+            for (auto& pair : allNodes) delete pair.second;
+            return path;
+        }
+
+        closedSet.insert(hash(current->pos));
+
+        std::vector<Point2> neighbors = {
+            {current->pos.x + 1, current->pos.y},
+            {current->pos.x - 1, current->pos.y},
+            {current->pos.x, current->pos.y + 1},
+            {current->pos.x, current->pos.y - 1}
+        };
+
+        for (const Point2& neighbor : neighbors) {
+            if (neighbor.x < 0 || neighbor.x >= maze[0].size() || neighbor.y < 0 || neighbor.y >= maze.size() || maze[neighbor.y][neighbor.x] == 1) {
+                continue;
+            }
+
+            int neighborHash = hash(neighbor);
+            if (closedSet.find(neighborHash) != closedSet.end()) {
+                continue;
+            }
+
+            int tentativeGCost = current->gCost + 1;
+            if (allNodes.find(neighborHash) == allNodes.end() || tentativeGCost < allNodes[neighborHash]->gCost) {
+                Node* neighborNode = new Node(neighbor, tentativeGCost, heuristic(neighbor, goal), current);
+                openSet.push(neighborNode);
+                allNodes[neighborHash] = neighborNode;
+            }
+        }
+    }
+
+    for (auto& pair : allNodes) delete pair.second;
+    return {};
+}
+
+std::vector<Point2> MyEngineSystem::reconstructPath(Node* node) {
+    std::vector<Point2> path;
+    while (node) {
+        path.push_back(node->pos);
+        node = node->parent;
+    }
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+
+void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize) {
+    enemyMoveCooldownCounter++;
+    if (enemyMoveCooldownCounter >= enemyMoveCooldown) {
+        for (size_t i = 0; i < enemyPositions.size(); ++i) {
+            // Recalculate the path to the player position at every update cycle
+            enemyPaths[i] = findPath(enemyPositions[i], boxPos, maze);
+            enemyPathIndices[i] = 0;
+        }
+        enemyMoveCooldownCounter = 0;
+    }
+
+    for (size_t i = 0; i < enemyPositions.size(); ++i) {
+        enemyMoveCounters[i]++;
+        if (enemyMoveCounters[i] >= ENEMY_MOVE_COOLDOWN) { // Use the movement cooldown
+            if (!enemyPaths[i].empty() && enemyPathIndices[i] < enemyPaths[i].size()) {
+                enemyPositions[i] = enemyPaths[i][enemyPathIndices[i]];
+                enemyPathIndices[i]++;
+            }
+            enemyMoveCounters[i] = 0; // Reset the move counter for the enemy
+        }
+    }
+}
+
+void MyEngineSystem::renderEnemies(std::shared_ptr<GraphicsEngine> gfx, int cellSize) const {
+    for (const auto& enemyPos : enemyPositions) {
+        gfx->setDrawColor(SDL_COLOR_BLACK);
+        gfx->drawRect(enemyPos.x * cellSize - 1, enemyPos.y * cellSize - 1, cellSize + 2, cellSize + 2); // Border
+        gfx->setDrawColor(SDL_COLOR_RED);
+        gfx->fillRect(enemyPos.x * cellSize, enemyPos.y * cellSize, cellSize, cellSize);
+    }
+}
+
+void MyEngineSystem::spawnEasterEgg(const std::vector<std::vector<int>>& maze, int cellSize) {
+    srand(static_cast<unsigned int>(time(0)));
+    int row, col;
+    do {
+        row = rand() % (maze.size() - 2) + 1; // Avoid edges
+        col = rand() % (maze[0].size() - 2) + 1;
+    } while (maze[row][col] != 0);
+    easterEgg.pos = Point2(col * cellSize + cellSize / 2, row * cellSize + cellSize / 2);
+    easterEgg.isCollected = false;
+    easterEgg.messageTimer = 0;
+}
+
+void MyEngineSystem::handleEasterEggCollection(const SDL_Rect& box, int& score) {
+    SDL_Rect eggRect = { easterEgg.pos.x - 10, easterEgg.pos.y - 10, 20, 20 };
+    if (!easterEgg.isCollected && SDL_HasIntersection(&box, &eggRect)) {
+        easterEgg.isCollected = true;
+        easterEgg.messageTimer = SDL_GetTicks(); // Start the timer
+        score += 500; // Bonus score for collecting the EasterEgg
+    }
 }
 
 bool MyEngineSystem::shouldDisplayEasterEggMessage() const {
-	return easterEgg.isCollected && (SDL_GetTicks() - easterEgg.messageTimer < easterEgg.MESSAGE_DURATION);
+    return easterEgg.isCollected && (SDL_GetTicks() - easterEgg.messageTimer < easterEgg.MESSAGE_DURATION);
 }
 
 Point2 MyEngineSystem::getEasterEggPosition() const {
-	return easterEgg.pos;
+    return easterEgg.pos;
 }
 
 bool MyEngineSystem::isEasterEggCollected() const {
-	return easterEgg.isCollected;
+    return easterEgg.isCollected;
 }
 
 void MyEngineSystem::renderEasterEgg(std::shared_ptr<GraphicsEngine> gfx) const {
-	if (!easterEgg.isCollected) {
-		gfx->setDrawColor(SDL_COLOR_PURPLE);
-		gfx->fillRect(easterEgg.pos.x - 10, easterEgg.pos.y - 10, 20, 20);
-	}
+    if (!easterEgg.isCollected) {
+        gfx->setDrawColor(SDL_COLOR_PURPLE);
+        gfx->fillRect(easterEgg.pos.x - 10, easterEgg.pos.y - 10, 20, 20);
+    }
 }
 
 void MyEngineSystem::renderEasterEggMessage(std::shared_ptr<GraphicsEngine> gfx) const {
-	if (shouldDisplayEasterEggMessage()) {
-		// Draw background box for the text
-		int textX = 300;
-		int textY = 300;
-		int textWidth = 320; // Adjust width as needed
-		int textHeight = 50; // Adjust height as needed
-
-		gfx->setDrawColor(SDL_COLOR_PURPLE); // Background color
-		gfx->fillRect(textX - 10, textY - 10, textWidth, textHeight); // Draw background box
-
-		// Load a smaller font for the EasterEgg message
-		TTF_Font* smallFont = ResourceManager::loadFont("res/fonts/arial.ttf", 20); // Load smaller font
-		gfx->useFont(smallFont);
-
-		gfx->setDrawColor(SDL_COLOR_WHITE); // Text color
-		gfx->drawText("DAMIAN_COLEMAN-CI517-2024", textX, textY); // Display text when EasterEgg is collected
-
-		// Restore the original font size
-		TTF_Font* originalFont = ResourceManager::loadFont("res/fonts/arial.ttf", 35);
-		gfx->useFont(originalFont);
-	}
+    if (shouldDisplayEasterEggMessage()) {
+        int textX = 575; // Draw background box for the text
+        int textY = 275;
+        int textWidth = 225; // Adjust width as needed
+        int textHeight = 30; // Adjust height as needed
+        gfx->setDrawColor(SDL_COLOR_PURPLE); // Background color
+        gfx->fillRect(textX - 5, textY - 5, textWidth, textHeight); // Draw background box
+        TTF_Font* smallFont = ResourceManager::loadFont("res/fonts/arial.ttf", 13); // Load a smaller font for the EasterEgg message
+        TTF_SetFontStyle(smallFont, TTF_STYLE_BOLD);
+        gfx->useFont(smallFont);
+        gfx->setDrawColor(SDL_COLOR_WHITE); // Text color
+        gfx->drawText("DAMIAN_COLEMAN-CI517-2024", textX, textY); // Display text when EasterEgg is collected
+        TTF_Font* originalFont = ResourceManager::loadFont("res/fonts/arial.ttf", 35); // Restore the original font size
+        gfx->useFont(originalFont);
+    }
 }
