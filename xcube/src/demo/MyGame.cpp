@@ -7,9 +7,10 @@ MyGame.cpp*/
 //MyGame.cpp
 #include "MyGame.h"
 
-MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(5), gameWon(false), quitGame(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 } {
+MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(5), gameWon(false), gameOver(false), quitGame(false), doorVisible(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 }, playAgainButton{ 610, 440, 180, 45 }, door{ 540, 30, 30, 30 } {
     TTF_Font* font = ResourceManager::loadFont("res/fonts/arial.ttf", 35);
     gfx->useFont(font);
+    originalFont = font; // Store the original font
     gfx->setVerticalSync(true);
 
     quitButton = Rect(640, 500, 120, 40);
@@ -55,6 +56,34 @@ MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(5), gameWon(false
     mySystem->spawnEasterEgg(maze, CELL_SIZE); // Spawn the EasterEgg
 }
 
+void MyGame::resetGame() {
+    score = 0;
+    lives = 3;
+    numKeys = 5;
+    gameWon = false;
+    gameOver = false;
+    quitGame = false;
+    doorVisible = false;
+    box = { 30, 30, 30, 30 };
+    velocity = { 0, 0 };
+    gameKeys.clear();
+
+    for (int i = 0; i < numKeys; i++) {
+        int row, col; // Find a random empty cell (maze[row][col] == 0)
+        do {
+            row = getRandom(1, MAZE_ROWS - 2); // Avoid edges
+            col = getRandom(1, MAZE_COLS - 2);
+        } while (maze[row][col] != 0);
+        std::shared_ptr<GameKey> k = std::make_shared<GameKey>(); // Place the key at the center of the cell
+        k->isAlive = true;
+        k->pos = Point2(col * CELL_SIZE + CELL_SIZE / 2, row * CELL_SIZE + CELL_SIZE / 2);
+        gameKeys.push_back(k);
+    }
+
+    mySystem->initializeEnemyPositions(maze, Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), 5, 3); // Initialize 3 enemies with a minimum distance
+    mySystem->spawnEasterEgg(maze, CELL_SIZE); // Spawn the EasterEgg
+}
+
 MyGame::~MyGame() {
 
 }
@@ -71,6 +100,26 @@ void MyGame::handleKeyEvents() {
 }
 
 void MyGame::update() {
+    if (gameWon || gameOver) {
+        // Check for mouse click to handle quit button and play again button
+        if (eventSystem->isPressed(Mouse::BTN_LEFT)) {
+            Point2 mousePos = eventSystem->getMousePos();
+            if (quitButton.contains(mousePos)) {
+                quitGame = true;
+            }
+            else if (playAgainButton.contains(mousePos)) {
+                resetGame();
+            }
+        }
+
+        if (quitGame) {
+            SDL_Quit();  // Gracefully close SDL systems
+            exit(0);     // Exit update loop
+        }
+
+        return; // Skip the rest of the update logic if the game is won or over
+    }
+
     moveCooldownCounter++; // Update cooldown counter
 
     if (moveCooldownCounter >= moveCooldown) { // Only allow movement if the cooldown has elapsed
@@ -112,13 +161,23 @@ void MyGame::update() {
 
     mySystem->handleEasterEggCollection(box.getSDLRect(), score); // Handle collecting the EasterEgg
 
-    mySystem->updateEnemies(Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), maze, CELL_SIZE); // Update enemy positions
+    mySystem->updateEnemies(Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), maze, CELL_SIZE, box.getSDLRect(), lives); // Update enemy positions and check for collisions
 
     velocity.x = 0; // Reset velocity to prevent continuous movement
     velocity.y = 0;
 
-    if (numKeys == 0) { // Check if the player has won
+    if (numKeys == 0 && mySystem->isEasterEggCollected()) { // Check if the player has collected all keys and the Easter egg
+        doorVisible = true;
+    }
+
+    if (doorVisible && box.intersects(door)) { // Check for collision with the door
         gameWon = true;
+    }
+
+    if (lives <= 0) {
+        gameOver = true;
+        box.x = -100; // Move the player off-screen
+        box.y = -100; // Move the player off-screen
     }
 
     if (eventSystem->isPressed(Mouse::BTN_LEFT)) {  // Check for mouse click
@@ -165,6 +224,13 @@ void MyGame::render() {
 
     mySystem->renderEnemies(gfx, CELL_SIZE); // Render the enemy
 
+    if (doorVisible) { // Draw the door if it is visible
+        gfx->setDrawColor(SDL_COLOR_ORANGE);
+        gfx->fillRect(door.x, door.y, door.w, door.h);
+        gfx->setDrawColor(SDL_COLOR_BLACK);
+        gfx->drawRect(door.x - 1, door.y - 1, door.w + 2, door.h + 2); // Border
+    }
+
     // Grid lines for better visualization
     gfx->setDrawColor(SDL_COLOR_GRAY);
     for (int row = 0; row <= MAZE_ROWS; ++row) {
@@ -178,10 +244,29 @@ void MyGame::render() {
 void MyGame::renderUI() {
     gfx->setDrawColor(SDL_COLOR_BLACK);
     std::string scoreStr = "Score: " + std::to_string(score);
-    gfx->drawText(scoreStr, 605, 25); // Fixed position at (700, 25)
+    gfx->drawText(scoreStr, 605, 25); // Fixed position at (605, 25)
+
+    std::string livesStr = "Lives: " + std::to_string(lives);
+    gfx->drawText(livesStr, 605, 60); // Fixed position at (605, 60)
 
     if (gameWon) {
-        gfx->drawText("YOU WON", 615, 60);
+        gfx->drawText("YOU WON", 615, 95);
+
+        gfx->setDrawColor(SDL_COLOR_GRAY);
+        gfx->fillRect(playAgainButton.x, playAgainButton.y, playAgainButton.w, playAgainButton.h); // Draw Play Again button
+        gfx->setDrawColor(SDL_COLOR_BLACK);
+        gfx->drawText("Play Again", playAgainButton.x + 7, playAgainButton.y + 0);
+    }
+    else if (gameOver) {
+        TTF_Font* smallFont = ResourceManager::loadFont("res/fonts/arial.ttf", 32); // Load smaller font
+        gfx->useFont(smallFont); // Use smaller font for "GAME OVER" text
+        gfx->drawText("GAME OVER", 604, 95);
+        gfx->useFont(originalFont); // Revert to the original font
+
+        gfx->setDrawColor(SDL_COLOR_GRAY);
+        gfx->fillRect(playAgainButton.x, playAgainButton.y, playAgainButton.w, playAgainButton.h); // Draw Try Again button
+        gfx->setDrawColor(SDL_COLOR_BLACK);
+        gfx->drawText("Try Again", playAgainButton.x + 15, playAgainButton.y + 0);
     }
 
     gfx->setDrawColor(SDL_COLOR_GRAY);

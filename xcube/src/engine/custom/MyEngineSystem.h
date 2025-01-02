@@ -46,13 +46,14 @@ private:
 
     EasterEgg easterEgg;
 
+    static const int CELL_SIZE = 30;
+
     std::vector<Point2> enemyPositions;
     std::vector<std::vector<Point2>> enemyPaths;
     std::vector<int> enemyPathIndices;
     int enemyMoveCooldown;
     int enemyMoveCooldownCounter;
     std::vector<int> enemyMoveCounters;
-    std::vector<int> enemyMoveSpeeds;
     const int ENEMY_MOVE_COOLDOWN = 9; // Enemies move at half the speed of the player
     std::vector<Point2> findPath(const Point2& start, const Point2& goal, const std::vector<std::vector<int>>& maze);
     std::vector<Point2> reconstructPath(Node* node);
@@ -67,7 +68,8 @@ public:
     bool isEasterEggCollected() const;
     void renderEasterEgg(std::shared_ptr<GraphicsEngine> gfx) const;
     void renderEasterEggMessage(std::shared_ptr<GraphicsEngine> gfx) const;
-    void updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize);
+    void updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives);
     void renderEnemies(std::shared_ptr<GraphicsEngine> gfx, int cellSize) const;
+    void handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions);
 };
 #endif // __MY_ENGINE_H__

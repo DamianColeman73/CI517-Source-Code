@@ -13,6 +13,7 @@ MyGame.cpp*/
 #include <ctime>
 #include <cmath>
 #include <unordered_set>
+#include <iostream> // Add this include for debug logging
 
 bool operator==(const Point2& lhs, const Point2& rhs) { // Add the operator== for Point2 here
     return lhs.x == rhs.x && lhs.y == rhs.y;
@@ -24,7 +25,6 @@ void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>
     enemyPaths.clear();
     enemyPathIndices.clear();
     enemyMoveCounters.clear(); // Initialize the move counters
-    enemyMoveSpeeds.clear(); // Initialize the move speeds
 
     auto isTooClose = [](const Point2& a, const Point2& b) {
         return std::abs(a.x - b.x) < 2 && std::abs(a.y - b.y) < 2;
@@ -54,7 +54,7 @@ void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>
         enemyPaths.push_back({});
         enemyPathIndices.push_back(0);
         enemyMoveCounters.push_back(0); // Initialize the move counter for each enemy
-        enemyMoveSpeeds.push_back(rand() % 5 + 1); // Assign a random movement speed for each enemy (1 to 5)
+        std::cout << "Initialized enemy " << i << " at (" << col << ", " << row << ")\n"; // Debug logging
     }
 }
 
@@ -125,7 +125,7 @@ std::vector<Point2> MyEngineSystem::reconstructPath(Node* node) {
     return path;
 }
 
-void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize) {
+void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives) {
     enemyMoveCooldownCounter++;
     if (enemyMoveCooldownCounter >= enemyMoveCooldown) {
         for (size_t i = 0; i < enemyPositions.size(); ++i) {
@@ -138,22 +138,45 @@ void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::
 
     for (size_t i = 0; i < enemyPositions.size(); ++i) {
         enemyMoveCounters[i]++;
-        if (enemyMoveCounters[i] >= ENEMY_MOVE_COOLDOWN) { // Use the movement cooldown
+        if (enemyMoveCounters[i] >= ENEMY_MOVE_COOLDOWN) { // Use a consistent movement cooldown for all enemies
             if (!enemyPaths[i].empty() && enemyPathIndices[i] < enemyPaths[i].size()) {
                 enemyPositions[i] = enemyPaths[i][enemyPathIndices[i]];
                 enemyPathIndices[i]++;
             }
             enemyMoveCounters[i] = 0; // Reset the move counter for the enemy
         }
+        std::cout << "Enemy " << i << " at (" << enemyPositions[i].x << ", " << enemyPositions[i].y << "), Move Counter: " << enemyMoveCounters[i] << "\n"; // Debug logging
+    }
+    handlePlayerEnemyCollision(Box, lives, enemyPositions); // Check for collisions with the player
+}
+
+void MyEngineSystem::handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions) {
+    for (size_t i = 0; i < enemyPositions.size(); ) {
+        SDL_Rect enemyRect = { enemyPositions[i].x * CELL_SIZE, enemyPositions[i].y * CELL_SIZE, CELL_SIZE, CELL_SIZE };
+        std::cout << "Checking collision: Player at (" << Box.x << ", " << Box.y << ") with Enemy at (" << enemyRect.x << ", " << enemyRect.y << ")\n";
+        if (SDL_HasIntersection(&Box, &enemyRect)) {
+            std::cout << "Collision detected: Player at (" << Box.x << ", " << Box.y << ") with Enemy at (" << enemyRect.x << ", " << enemyRect.y << ")\n";
+            enemyPositions.erase(enemyPositions.begin() + i); // Remove the enemy
+            lives--; // Decrease player's lives
+            if (lives <= 0) {
+                std::cout << "Game Over: Player has no more lives.\n";
+                // Handle game over logic if needed
+            }
+        }
+        else {
+            ++i;
+        }
     }
 }
 
 void MyEngineSystem::renderEnemies(std::shared_ptr<GraphicsEngine> gfx, int cellSize) const {
-    for (const auto& enemyPos : enemyPositions) {
+    for (size_t i = 0; i < enemyPositions.size(); ++i) {
+        const auto& enemyPos = enemyPositions[i];
         gfx->setDrawColor(SDL_COLOR_BLACK);
         gfx->drawRect(enemyPos.x * cellSize - 1, enemyPos.y * cellSize - 1, cellSize + 2, cellSize + 2); // Border
         gfx->setDrawColor(SDL_COLOR_RED);
         gfx->fillRect(enemyPos.x * cellSize, enemyPos.y * cellSize, cellSize, cellSize);
+        std::cout << "Rendering enemy " << i << " at (" << enemyPos.x << ", " << enemyPos.y << ")\n"; // Debug logging
     }
 }
 

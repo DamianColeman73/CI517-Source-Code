@@ -31,10 +31,17 @@ private:
 
 	Rect quitButton; // Rectangle for the Quit button
 	bool quitGame;   // Flag to quit the game
+	Rect playAgainButton; // Rectangle for the Play Again button
 
 	int score, numKeys, lives; /* GAMEPLAY */
 	bool gameWon;
+	bool gameOver;
+	bool doorVisible; // Flag to check if the door should be displayed
+	Rect door; // Rectangle for the door
 
+	TTF_Font* originalFont;
+
+	void resetGame();
 	void handleKeyEvents();
 	void update();
 	void render();
