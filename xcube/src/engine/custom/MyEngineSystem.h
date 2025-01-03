@@ -54,7 +54,7 @@ private:
     int enemyMoveCooldown;
     int enemyMoveCooldownCounter;
     std::vector<int> enemyMoveCounters;
-    const int ENEMY_MOVE_COOLDOWN = 9; // Enemies move at half the speed of the player
+    const int ENEMY_MOVE_COOLDOWN = 7; // Enemies move at half the speed of the player
     std::vector<Point2> findPath(const Point2& start, const Point2& goal, const std::vector<std::vector<int>>& maze);
     std::vector<Point2> reconstructPath(Node* node);
 

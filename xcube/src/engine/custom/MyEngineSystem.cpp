@@ -14,6 +14,8 @@ MyGame.cpp*/
 #include <cmath>
 #include <unordered_set>
 #include <iostream> // Add this include for debug logging
+#include <numeric>
+#include <algorithm>
 
 bool operator==(const Point2& lhs, const Point2& rhs) { // Add the operator== for Point2 here
     return lhs.x == rhs.x && lhs.y == rhs.y;
@@ -27,17 +29,20 @@ void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>
     enemyMoveCounters.clear(); // Initialize the move counters
 
     auto isTooClose = [](const Point2& a, const Point2& b) {
-        return std::abs(a.x - b.x) < 2 && std::abs(a.y - b.y) < 2;
+        return std::abs(a.x - b.x) <= 1 && std::abs(a.y - b.y) <= 1;
         };
 
     for (int i = 0; i < numEnemies; ++i) {
-        int row, col;
+        Point2 newPos;
         bool validPosition;
+
         do {
             validPosition = true;
-            row = rand() % (maze.size() - 2) + 1; // Avoid edges
-            col = rand() % (maze[0].size() - 2) + 1;
-            Point2 newPos(col, row);
+            int row = rand() % (maze.size() - 2) + 1; // Avoid edges
+            int col = rand() % (maze[0].size() - 2) + 1;
+            newPos = Point2(col, row);
+
+            // Check that the position is walkable, far from the player, and not overlapping or too close to other enemies
             if (maze[row][col] != 0 || std::abs(row - boxPos.y) + std::abs(col - boxPos.x) < minDistance) {
                 validPosition = false;
             }
@@ -50,11 +55,12 @@ void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>
                 }
             }
         } while (!validPosition);
-        enemyPositions.push_back(Point2(col, row));
+
+        // Add the new valid position to the list
+        enemyPositions.push_back(newPos);
         enemyPaths.push_back({});
         enemyPathIndices.push_back(0);
         enemyMoveCounters.push_back(0); // Initialize the move counter for each enemy
-        std::cout << "Initialized enemy " << i << " at (" << col << ", " << row << ")\n"; // Debug logging
     }
 }
 
@@ -136,36 +142,102 @@ void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::
         enemyMoveCooldownCounter = 0;
     }
 
-    for (size_t i = 0; i < enemyPositions.size(); ++i) {
+    auto isSamePosition = [](const Point2& a, const Point2& b) {
+        return a.x == b.x && a.y == b.y;
+        };
+
+    auto isTooClose = [](const Point2& a, const Point2& b) {
+        return std::abs(a.x - b.x) <= 1 && std::abs(a.y - b.y) <= 1;
+        };
+
+    auto isNearPlayer = [](const Point2& pos, const Point2& playerPos) {
+        return std::abs(pos.x - playerPos.x) <= 2 && std::abs(pos.y - playerPos.y) <= 2;
+        };
+
+    // Sort enemies based on their distance to the player
+    std::vector<size_t> enemyIndices(enemyPositions.size());
+    std::iota(enemyIndices.begin(), enemyIndices.end(), 0);
+    std::sort(enemyIndices.begin(), enemyIndices.end(), [&](size_t a, size_t b) {
+        return heuristic(enemyPositions[a], boxPos) < heuristic(enemyPositions[b], boxPos);
+        });
+
+    for (size_t i : enemyIndices) {
         enemyMoveCounters[i]++;
         if (enemyMoveCounters[i] >= ENEMY_MOVE_COOLDOWN) { // Use a consistent movement cooldown for all enemies
             if (!enemyPaths[i].empty() && enemyPathIndices[i] < enemyPaths[i].size()) {
-                enemyPositions[i] = enemyPaths[i][enemyPathIndices[i]];
-                enemyPathIndices[i]++;
+                Point2 nextPos = enemyPaths[i][enemyPathIndices[i]];
+                bool canMove = true;
+
+                // Check if the next position is the same as or too close to any other enemy's current or next position
+                for (size_t j = 0; j < enemyPositions.size(); ++j) {
+                    if (i != j) {
+                        Point2 otherNextPos = (enemyPathIndices[j] < enemyPaths[j].size()) ? enemyPaths[j][enemyPathIndices[j]] : enemyPositions[j];
+                        if (isSamePosition(nextPos, enemyPositions[j]) || isSamePosition(nextPos, otherNextPos) || isTooClose(nextPos, enemyPositions[j])) {
+                            canMove = false;
+                            break;
+                        }
+                    }
+                }
+
+                // Allow movement if the enemy is near the player or if it is prioritized
+                if (canMove || isNearPlayer(enemyPositions[i], boxPos)) {
+                    enemyPositions[i] = nextPos;
+                    enemyPathIndices[i]++;
+                }
+                else {
+                    // If the enemy cannot move, prioritize the next enemy in the round-robin
+                    enemyMoveCounters[i] = ENEMY_MOVE_COOLDOWN - 1;
+                }
             }
             enemyMoveCounters[i] = 0; // Reset the move counter for the enemy
         }
+
+        // Check if enemies are stuck together and move them apart
+        for (size_t j = 0; j < enemyPositions.size(); ++j) {
+            if (i != j && isTooClose(enemyPositions[i], enemyPositions[j])) {
+                // Move enemy i away from enemy j
+                if (enemyPositions[i].x < enemyPositions[j].x) {
+                    enemyPositions[i].x--;
+                }
+                else if (enemyPositions[i].x > enemyPositions[j].x) {
+                    enemyPositions[i].x++;
+                }
+                if (enemyPositions[i].y < enemyPositions[j].y) {
+                    enemyPositions[i].y--;
+                }
+                else if (enemyPositions[i].y > enemyPositions[j].y) {
+                    enemyPositions[i].y++;
+                }
+            }
+        }
+
         std::cout << "Enemy " << i << " at (" << enemyPositions[i].x << ", " << enemyPositions[i].y << "), Move Counter: " << enemyMoveCounters[i] << "\n"; // Debug logging
     }
     handlePlayerEnemyCollision(Box, lives, enemyPositions); // Check for collisions with the player
 }
 
 void MyEngineSystem::handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions) {
-    for (size_t i = 0; i < enemyPositions.size(); ) {
+    std::vector<size_t> enemiesToRemove;
+    for (size_t i = 0; i < enemyPositions.size(); ++i) {
         SDL_Rect enemyRect = { enemyPositions[i].x * CELL_SIZE, enemyPositions[i].y * CELL_SIZE, CELL_SIZE, CELL_SIZE };
-        std::cout << "Checking collision: Player at (" << Box.x << ", " << Box.y << ") with Enemy at (" << enemyRect.x << ", " << enemyRect.y << ")\n";
         if (SDL_HasIntersection(&Box, &enemyRect)) {
-            std::cout << "Collision detected: Player at (" << Box.x << ", " << Box.y << ") with Enemy at (" << enemyRect.x << ", " << enemyRect.y << ")\n";
-            enemyPositions.erase(enemyPositions.begin() + i); // Remove the enemy
-            lives--; // Decrease player's lives
+            std::cout << "Collision detected with enemy at (" << enemyPositions[i].x << ", " << enemyPositions[i].y << ")\n";
+            enemiesToRemove.push_back(i);
+            lives--;
             if (lives <= 0) {
                 std::cout << "Game Over: Player has no more lives.\n";
-                // Handle game over logic if needed
+                // Handle game over logic
+                break;
             }
         }
-        else {
-            ++i;
-        }
+    }
+    // Remove enemies after the loop to avoid modifying the vector while iterating
+    for (auto it = enemiesToRemove.rbegin(); it != enemiesToRemove.rend(); ++it) {
+        std::cout << "Removing enemy at index " << *it << " with position (" << enemyPositions[*it].x << ", " << enemyPositions[*it].y << ")\n";
+        enemyPositions.erase(enemyPositions.begin() + *it);
+        enemyPaths.erase(enemyPaths.begin() + *it);
+        enemyPathIndices.erase(enemyPathIndices.begin() + *it);
+        enemyMoveCounters.erase(enemyMoveCounters.begin() + *it);
     }
 }
 

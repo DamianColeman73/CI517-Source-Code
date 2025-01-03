@@ -6,8 +6,9 @@ MyGame.cpp*/
 
 //MyGame.cpp
 #include "MyGame.h"
+#include <unordered_set>
 
-MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(5), gameWon(false), gameOver(false), quitGame(false), doorVisible(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 }, playAgainButton{ 610, 440, 180, 45 }, door{ 540, 30, 30, 30 } {
+MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(10), gameWon(false), gameOver(false), quitGame(false), doorVisible(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 }, playAgainButton{ 610, 440, 180, 45 }, door{ 540, 30, 30, 30 } {
     TTF_Font* font = ResourceManager::loadFont("res/fonts/arial.ttf", 35);
     gfx->useFont(font);
     originalFont = font; // Store the original font
@@ -40,26 +41,34 @@ MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(5), gameWon(false
     box.x = 30;
     box.y = 30;
 
+    mySystem = std::make_shared<MyEngineSystem>();
+    mySystem->spawnEasterEgg(maze, CELL_SIZE); // Spawn the EasterEgg
+    Point2 easterEggPos = mySystem->getEasterEggPosition();
+
+    std::unordered_set<int> occupiedCells;
+    occupiedCells.insert((box.y / CELL_SIZE) * MAZE_COLS + (box.x / CELL_SIZE)); // Mark the player's initial position as occupied
+    occupiedCells.insert((easterEggPos.y / CELL_SIZE) * MAZE_COLS + (easterEggPos.x / CELL_SIZE)); // Mark the Easter egg's position as occupied
+
     for (int i = 0; i < numKeys; i++) {
-        int row, col; // Find a random empty cell (maze[row][col] == 0)
+        int row, col;
         do {
             row = getRandom(1, MAZE_ROWS - 2); // Avoid edges
             col = getRandom(1, MAZE_COLS - 2);
-        } while (maze[row][col] != 0);
-        std::shared_ptr<GameKey> k = std::make_shared<GameKey>(); // Place the key at the center of the cell
+        } while (maze[row][col] != 0 || occupiedCells.count(row * MAZE_COLS + col) > 0);
+        occupiedCells.insert(row * MAZE_COLS + col);
+        std::shared_ptr<GameKey> k = std::make_shared<GameKey>();
         k->isAlive = true;
         k->pos = Point2(col * CELL_SIZE + CELL_SIZE / 2, row * CELL_SIZE + CELL_SIZE / 2);
         gameKeys.push_back(k);
     }
-    mySystem = std::make_shared<MyEngineSystem>();
-    mySystem->initializeEnemyPositions(maze, Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), 5, 3); // Initialize 3 enemies with a minimum distance
-    mySystem->spawnEasterEgg(maze, CELL_SIZE); // Spawn the EasterEgg
+
+    mySystem->initializeEnemyPositions(maze, Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), 8, 5); // Initialize 5 enemies with a minimum distance
 }
 
 void MyGame::resetGame() {
     score = 0;
     lives = 3;
-    numKeys = 5;
+    numKeys = 10;
     gameWon = false;
     gameOver = false;
     quitGame = false;
@@ -68,20 +77,27 @@ void MyGame::resetGame() {
     velocity = { 0, 0 };
     gameKeys.clear();
 
+    mySystem->spawnEasterEgg(maze, CELL_SIZE); // Spawn the EasterEgg
+    Point2 easterEggPos = mySystem->getEasterEggPosition();
+
+    std::unordered_set<int> occupiedCells;
+    occupiedCells.insert((box.y / CELL_SIZE) * MAZE_COLS + (box.x / CELL_SIZE)); // Mark the player's initial position as occupied
+    occupiedCells.insert((easterEggPos.y / CELL_SIZE) * MAZE_COLS + (easterEggPos.x / CELL_SIZE)); // Mark the Easter egg's position as occupied
+
     for (int i = 0; i < numKeys; i++) {
-        int row, col; // Find a random empty cell (maze[row][col] == 0)
+        int row, col;
         do {
             row = getRandom(1, MAZE_ROWS - 2); // Avoid edges
             col = getRandom(1, MAZE_COLS - 2);
-        } while (maze[row][col] != 0);
-        std::shared_ptr<GameKey> k = std::make_shared<GameKey>(); // Place the key at the center of the cell
+        } while (maze[row][col] != 0 || occupiedCells.count(row * MAZE_COLS + col) > 0);
+        occupiedCells.insert(row * MAZE_COLS + col);
+        std::shared_ptr<GameKey> k = std::make_shared<GameKey>();
         k->isAlive = true;
         k->pos = Point2(col * CELL_SIZE + CELL_SIZE / 2, row * CELL_SIZE + CELL_SIZE / 2);
         gameKeys.push_back(k);
     }
 
-    mySystem->initializeEnemyPositions(maze, Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), 5, 3); // Initialize 3 enemies with a minimum distance
-    mySystem->spawnEasterEgg(maze, CELL_SIZE); // Spawn the EasterEgg
+    mySystem->initializeEnemyPositions(maze, Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), 8, 5); // Initialize 5 enemies with a minimum distance
 }
 
 MyGame::~MyGame() {
