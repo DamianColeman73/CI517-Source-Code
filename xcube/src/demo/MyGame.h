@@ -1,14 +1,9 @@
-/*You should only modify :
-MyEngineSystem.h
-MyEngineSystem.cpp
-MyGame.h
-MyGame.cpp*/
-
-//MyGame.h
+//You should only modify this MyGame.h / MyGame.cpp / MyEngineSystem.cpp / MyEngineSystem.h
 #ifndef __TEST_GAME_H__
 #define __TEST_GAME_H__
 
 #include "../engine/AbstractGame.h"
+#include <unordered_set>
 
 struct GameKey {
 	Point2 pos;

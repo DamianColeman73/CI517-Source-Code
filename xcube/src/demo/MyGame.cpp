@@ -1,16 +1,9 @@
-/*You should only modify :
-MyEngineSystem.h
-MyEngineSystem.cpp
-MyGame.h
-MyGame.cpp*/
-
-//MyGame.cpp
+//You should only modify this MyGame.cpp / MyGame.h / MyEngineSystem.cpp / MyEngineSystem.h
 #include "MyGame.h"
-#include <unordered_set>
 
 MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(10), gameWon(false), gameOver(false), quitGame(false), doorVisible(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 }, playAgainButton{ 610, 440, 180, 45 }, door{ 540, 30, 30, 30 } {
     TTF_Font* font = ResourceManager::loadFont("res/fonts/arial.ttf", 35);
-    gfx->useFont(font);
+    gfx->useFont(font); 
     originalFont = font; // Store the original font
     gfx->setVerticalSync(true);
 
@@ -116,28 +109,23 @@ void MyGame::handleKeyEvents() {
 }
 
 void MyGame::update() {
-    if (gameWon || gameOver) {
-        // Check for mouse click to handle quit button and play again button
+    if (gameWon || gameOver) { // Check for mouse click to handle quit button and play again button
         if (eventSystem->isPressed(Mouse::BTN_LEFT)) {
             Point2 mousePos = eventSystem->getMousePos();
             if (quitButton.contains(mousePos)) {
                 quitGame = true;
-            }
-            else if (playAgainButton.contains(mousePos)) {
+            } else if (playAgainButton.contains(mousePos)) {
                 resetGame();
-            }
+              }
         }
-
         if (quitGame) {
             SDL_Quit();  // Gracefully close SDL systems
             exit(0);     // Exit update loop
         }
-
         return; // Skip the rest of the update logic if the game is won or over
     }
 
     moveCooldownCounter++; // Update cooldown counter
-
     if (moveCooldownCounter >= moveCooldown) { // Only allow movement if the cooldown has elapsed
         SDL_Rect nextBox = box.getSDLRect();
         nextBox.x += velocity.x;
@@ -247,8 +235,7 @@ void MyGame::render() {
         gfx->drawRect(door.x - 1, door.y - 1, door.w + 2, door.h + 2); // Border
     }
 
-    // Grid lines for better visualization
-    gfx->setDrawColor(SDL_COLOR_GRAY);
+    gfx->setDrawColor(SDL_COLOR_GRAY); // Grid lines for better visualization
     for (int row = 0; row <= MAZE_ROWS; ++row) {
         gfx->drawLine(Point2(0, row * CELL_SIZE), Point2(MAZE_COLS * CELL_SIZE, row * CELL_SIZE));
     }

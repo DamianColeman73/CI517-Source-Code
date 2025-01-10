@@ -1,20 +1,21 @@
-/*You should only modify :
-MyEngineSystem.h
-MyEngineSystem.cpp
-MyGame.h
-MyGame.cpp*/
-
-//MyEngineSystem.h
+//You should only modify this MyEngineSystem.h / MyEngineSystem.cpp / MyGame.cpp / MyGame.h
 #ifndef __MY_ENGINE_H__
 #define __MY_ENGINE_H__
 
+#include "../EngineCommon.h"
+#include "../GameMath.h"
+#include "../GraphicsEngine.h"
 #include <vector>
 #include <memory>
 #include <queue>
 #include <unordered_map>
-#include "../EngineCommon.h"
-#include "../GameMath.h"
-#include "../GraphicsEngine.h"
+#include <cstdlib>
+#include <ctime>
+#include <cmath>
+#include <unordered_set>
+#include <iostream>
+#include <numeric>
+#include <algorithm>
 
 class MyEngineSystem {
     friend class XCube2Engine;
