@@ -16,6 +16,7 @@
 #include <iostream>
 #include <numeric>
 #include <algorithm>
+#include <SDL_mixer.h>
 
 class MyEngineSystem {
     friend class XCube2Engine;
@@ -45,9 +46,12 @@ private:
         }
     };
 
+    static const int CELL_SIZE = 30;
+    
     EasterEgg easterEgg;
 
-    static const int CELL_SIZE = 30;
+    Mix_Chunk* EnemyCollisionSound;
+    Mix_Chunk* EasterEgg;
 
     std::vector<Point2> enemyPositions;
     std::vector<std::vector<Point2>> enemyPaths;
@@ -60,7 +64,7 @@ private:
     std::vector<Point2> reconstructPath(Node* node);
 
 public:
-    MyEngineSystem() : enemyMoveCooldown(10), enemyMoveCooldownCounter(0) {}
+    MyEngineSystem() : enemyMoveCooldown(10), enemyMoveCooldownCounter(0), EnemyCollisionSound(nullptr), EasterEgg(nullptr) {}
     void initializeEnemyPositions(const std::vector<std::vector<int>>& maze, const Point2& boxPos, int minDistance, int numEnemies);
     void spawnEasterEgg(const std::vector<std::vector<int>>& maze, int cellSize);
     void handleEasterEggCollection(const SDL_Rect& box, int& score);
@@ -69,8 +73,8 @@ public:
     bool isEasterEggCollected() const;
     void renderEasterEgg(std::shared_ptr<GraphicsEngine> gfx) const;
     void renderEasterEggMessage(std::shared_ptr<GraphicsEngine> gfx) const;
-    void updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives);
+    void updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives, Mix_Chunk* EnemyCollisionSound);
     void renderEnemies(std::shared_ptr<GraphicsEngine> gfx, int cellSize) const;
-    void handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions);
+    void handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions, Mix_Chunk* EnemycollisionSound);
 };
 #endif // __MY_ENGINE_H__

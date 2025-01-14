@@ -4,6 +4,7 @@
 
 #include "../engine/AbstractGame.h"
 #include <unordered_set>
+#include <thread>
 
 struct GameKey {
 	Point2 pos;
@@ -27,6 +28,23 @@ private:
 	Rect quitButton; // Rectangle for the Quit button
 	bool quitGame;   // Flag to quit the game
 	Rect playAgainButton; // Rectangle for the Play Again button
+
+	SDL_Texture* wallTexture;
+	SDL_Texture* wallBackgroundTexture;
+
+	Mix_Chunk* CoinSound;
+	Mix_Chunk* PlayerDiesSound;
+	Mix_Chunk* GameOverSound;
+	Mix_Chunk* YouWinSound;
+	Mix_Chunk* DoorReveal;
+	Mix_Chunk* DoorOpening;
+	Mix_Music* BackgroundMusic;
+	Mix_Chunk* ButtonClick;
+	Mix_Chunk* ButtonHover;
+	Mix_Chunk* EnemyCollisionSound;
+	Mix_Chunk* EasterEgg;
+
+	bool doorSoundPlayed;
 
 	int score, numKeys, lives; /* GAMEPLAY */
 	bool gameWon;

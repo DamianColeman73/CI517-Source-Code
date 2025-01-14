@@ -1,13 +1,32 @@
 //You should only modify this MyGame.cpp / MyGame.h / MyEngineSystem.cpp / MyEngineSystem.h
 #include "MyGame.h"
 
-MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(10), gameWon(false), gameOver(false), quitGame(false), doorVisible(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 }, playAgainButton{ 610, 440, 180, 45 }, door{ 540, 30, 30, 30 } {
+MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(10), gameWon(false), gameOver(false), quitGame(false), doorVisible(false), doorSoundPlayed(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 }, playAgainButton{ 610, 440, 180, 45 }, door{ 540, 30, 30, 30 } {
     TTF_Font* font = ResourceManager::loadFont("res/fonts/arial.ttf", 35);
     gfx->useFont(font); 
     originalFont = font; // Store the original font
     gfx->setVerticalSync(true);
 
     quitButton = Rect(640, 500, 120, 40);
+
+    CoinSound = ResourceManager::loadSound("../res/sounds/VideoGameCoin_Harrietniamh_FreeSoundOrg.wav");
+	PlayerDiesSound = ResourceManager::loadSound("../res/sounds/GameDie_Jofae_FreeSoundOrg.mp3");
+	GameOverSound = ResourceManager::loadSound("../res/sounds/GameOver_DeletedUser_FreeSoundOrg.wav");
+    YouWinSound = ResourceManager::loadSound("../res/sounds/SuccessLoop#1_Sirkoto51_FreeSoundOrg_Edited.wav");
+	DoorReveal = ResourceManager::loadSound("../res/sounds/MagicReveal_Ienba_FreeSoundOrg_Edited.wav");
+	DoorOpening = ResourceManager::loadSound("../res/sounds/DoorOpening_Whiprealgood_FreeSoundOrg.wav");
+    BackgroundMusic = ResourceManager::loadMP3("../res/sounds/VideoGameMusicSeamless_X1shi_FreeSoundOrg.mp3");
+	ButtonClick = ResourceManager::loadSound("../res/sounds/ButtonClick2_BaggoNotes_FreeSoundOrg.wav");    // not working
+	ButtonHover = ResourceManager::loadSound("../res/sounds/ButtonHover_DeadSillyRabbit_FreeSoundOrg.mp3"); // not working
+    EnemyCollisionSound = ResourceManager::loadSound("../res/sounds/DamageSoundEffect_Raclure_FreeSoundOrg.mp3");
+    EasterEgg = ResourceManager::loadSound("../res/sounds/ConfirmationDownward_OriginalSound_FreeSoundOrg.wav");
+
+    Mix_PlayMusic(BackgroundMusic, -1);
+    Mix_VolumeMusic(MIX_MAX_VOLUME / 4);
+
+    wallTexture = ResourceManager::loadTexture("../res/images/SeamlessWall_128x128_GrumpyDiamond_OpenGameArtOrg.png", SDL_Color{ 0, 0, 0, 0 });
+    wallBackgroundTexture = ResourceManager::loadTexture("../res/images/handpaintedwall2.png", SDL_Color{ 0, 0, 0, 0 });
+
 
     maze = {
         {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
@@ -59,6 +78,13 @@ MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(10), gameWon(fals
 }
 
 void MyGame::resetGame() {
+    Mix_HaltChannel(-1); // Stop all sound effects
+    Mix_HaltMusic();
+
+    Mix_PlayMusic(BackgroundMusic, -1);
+
+    doorSoundPlayed = false;
+    
     score = 0;
     lives = 3;
     numKeys = 10;
@@ -94,7 +120,8 @@ void MyGame::resetGame() {
 }
 
 MyGame::~MyGame() {
-
+    Mix_FreeChunk(EnemyCollisionSound);
+    Mix_FreeChunk(EasterEgg);
 }
 
 void MyGame::handleKeyEvents() {
@@ -113,8 +140,10 @@ void MyGame::update() {
         if (eventSystem->isPressed(Mouse::BTN_LEFT)) {
             Point2 mousePos = eventSystem->getMousePos();
             if (quitButton.contains(mousePos)) {
+                sfx->playSound(ButtonClick);
                 quitGame = true;
             } else if (playAgainButton.contains(mousePos)) {
+                sfx->playSound(ButtonClick);
                 resetGame();
               }
         }
@@ -160,33 +189,50 @@ void MyGame::update() {
             score += 200;
             key->isAlive = false;
             numKeys--;
+            sfx->playSound(CoinSound);
         }
     }
 
     mySystem->handleEasterEggCollection(box.getSDLRect(), score); // Handle collecting the EasterEgg
 
-    mySystem->updateEnemies(Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), maze, CELL_SIZE, box.getSDLRect(), lives); // Update enemy positions and check for collisions
+    mySystem->updateEnemies(Point2(box.x / CELL_SIZE, box.y / CELL_SIZE), maze, CELL_SIZE, box.getSDLRect(), lives, EnemyCollisionSound); // Pass the collision sound
 
     velocity.x = 0; // Reset velocity to prevent continuous movement
     velocity.y = 0;
 
-    if (numKeys == 0 && mySystem->isEasterEggCollected()) { // Check if the player has collected all keys and the Easter egg
+    if (numKeys == 0 && mySystem->isEasterEggCollected() && !doorSoundPlayed) { // Check if the player has collected all keys and the Easter egg
         doorVisible = true;
+        sfx->playSound(DoorReveal);
+        doorSoundPlayed = true; // Set the flag to true after playing the sound
     }
 
     if (doorVisible && box.intersects(door)) { // Check for collision with the door
         gameWon = true;
+        sfx->playSound(DoorOpening);
+        std::thread([this]() {
+            SDL_Delay(500); 
+            Mix_HaltMusic();
+            sfx->playSound(YouWinSound);
+            }).detach();
     }
 
     if (lives <= 0) {
         gameOver = true;
         box.x = -100; // Move the player off-screen
         box.y = -100; // Move the player off-screen
+        std::thread([this]() {
+            SDL_Delay(500); // Delay for 1000 milliseconds (1 second)
+            Mix_HaltMusic();
+            sfx->playSound(PlayerDiesSound);
+            SDL_Delay(1000); // Delay for another 1000 milliseconds (1 second)
+            sfx->playSound(GameOverSound);
+            }).detach(); // Start a new thread to play the sounds after a delay
     }
 
     if (eventSystem->isPressed(Mouse::BTN_LEFT)) {  // Check for mouse click
         Point2 mousePos = eventSystem->getMousePos();  // Get mouse position
         if (quitButton.contains(mousePos)) {  // Pass the whole Point2 object
+            sfx->playSound(ButtonClick);
             quitGame = true;  // Set quit flag
         }
     }
@@ -199,13 +245,14 @@ void MyGame::update() {
 
 void MyGame::render() {
     gfx->setDrawColor(SDL_COLOR_WHITE);
+	//gfx->drawTexture(wallBackgroundTexture, nullptr); // Draw the background texture
     gfx->fillRect(0, 0, 800, 600); // Clear the screen
 
-    gfx->setDrawColor(SDL_COLOR_BLACK); // Draw the maze
     for (int row = 0; row < MAZE_ROWS; ++row) {
         for (int col = 0; col < MAZE_COLS; ++col) {
             if (maze[row][col] == 1) {
-                gfx->fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE); // Draw walls
+                SDL_Rect dstRect = { col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE };
+                gfx->drawTexture(wallTexture, &dstRect);
             }
         }
     }

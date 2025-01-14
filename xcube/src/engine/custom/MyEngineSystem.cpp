@@ -13,6 +13,8 @@ void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>
     enemyPaths.clear();
     enemyPathIndices.clear();
     enemyMoveCounters.clear(); // Initialize the move counters
+    EnemyCollisionSound = ResourceManager::loadSound("../res/sounds/DamageSoundEffect_Raclure_FreeSoundOrg.mp3");
+    EasterEgg = ResourceManager::loadSound("../res/sounds/ConfirmationDownward_OriginalSound_FreeSoundOrg.wav");
 
     auto isTooClose = [](const Point2& a, const Point2& b) {
         return std::abs(a.x - b.x) <= 1 && std::abs(a.y - b.y) <= 1;
@@ -115,7 +117,7 @@ std::vector<Point2> MyEngineSystem::reconstructPath(Node* node) {
     return path;
 }
 
-void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives) {
+void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives, Mix_Chunk* EnemycollisionSound) {
     enemyMoveCooldownCounter++;
     if (enemyMoveCooldownCounter >= enemyMoveCooldown) {
         for (size_t i = 0; i < enemyPositions.size(); ++i) {
@@ -187,10 +189,10 @@ void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::
 
         std::cout << "Enemy " << i << " at (" << enemyPositions[i].x << ", " << enemyPositions[i].y << "), Move Counter: " << enemyMoveCounters[i] << "\n"; // Debug logging
     }
-    handlePlayerEnemyCollision(Box, lives, enemyPositions); // Check for collisions with the player
+    handlePlayerEnemyCollision(Box, lives, enemyPositions, EnemyCollisionSound); // Pass the collision sound
 }
 
-void MyEngineSystem::handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions) {
+void MyEngineSystem::handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions, Mix_Chunk* EnemyCollisionSound) {
     std::vector<size_t> enemiesToRemove;
     for (size_t i = 0; i < enemyPositions.size(); ++i) {
         SDL_Rect enemyRect = { enemyPositions[i].x * CELL_SIZE, enemyPositions[i].y * CELL_SIZE, CELL_SIZE, CELL_SIZE };
@@ -198,6 +200,8 @@ void MyEngineSystem::handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::
             std::cout << "Collision detected with enemy at (" << enemyPositions[i].x << ", " << enemyPositions[i].y << ")\n";
             enemiesToRemove.push_back(i);
             lives--;
+            Mix_PlayChannel(-1, EnemyCollisionSound, 0); // Play the collision sound
+
             if (lives <= 0) {
                 std::cout << "Game Over: Player has no more lives.\n";
                 // Handle game over logic
@@ -242,6 +246,7 @@ void MyEngineSystem::handleEasterEggCollection(const SDL_Rect& box, int& score) 
     if (!easterEgg.isCollected && SDL_HasIntersection(&box, &eggRect)) {
         easterEgg.isCollected = true;
         easterEgg.messageTimer = SDL_GetTicks(); // Start the timer
+        Mix_PlayChannel(-1, EasterEgg, 0);
         score += 500; // Bonus score for collecting the EasterEgg
     }
 }
