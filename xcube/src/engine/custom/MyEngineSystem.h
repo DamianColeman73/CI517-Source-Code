@@ -49,23 +49,47 @@ private:
     static const int CELL_SIZE = 30;
     
     EasterEgg easterEgg;
-
-    Mix_Chunk* EnemyCollisionSound;
+    SDL_Texture* EasterEggTexture;
     Mix_Chunk* EasterEgg;
 
-    std::vector<Point2> enemyPositions;
+    SDL_Texture* enemyTextures[6]; // Array to store enemy textures
+    SDL_Texture* enemyDeathTextures[5]; // Array to store enemy death animation textures
+    Mix_Chunk* EnemyCollisionSound;
+
+    struct EnemyState {
+        Point2 position;
+        int direction;
+        int lastHorizontalDirection;
+        bool isDead;
+        int deathAnimationFrame;
+        int deathAnimationCounter;
+        int animationFrame;
+        int animationCounter;
+        static const int ANIMATION_FRAME_COUNT = 6; // Number of animation frames
+    };
+
+    std::vector<EnemyState> enemies; // Array to store enemy states
     std::vector<std::vector<Point2>> enemyPaths;
     std::vector<int> enemyPathIndices;
+    std::vector<int> enemyMoveCounters;
+    std::vector<Point2> enemyPositions;
     int enemyMoveCooldown;
     int enemyMoveCooldownCounter;
-    std::vector<int> enemyMoveCounters;
-    const int ENEMY_MOVE_COOLDOWN = 7; // Enemies move at half the speed of the player
+	const int ENEMY_MOVE_COOLDOWN = 7; // Cooldown for enemy movement to keep slower than the player
     std::vector<Point2> findPath(const Point2& start, const Point2& goal, const std::vector<std::vector<int>>& maze);
     std::vector<Point2> reconstructPath(Node* node);
+    std::vector<int> enemyDirections;
+    const int DEATH_ANIMATION_COOLDOWN = 10;
 
 public:
-    MyEngineSystem() : enemyMoveCooldown(10), enemyMoveCooldownCounter(0), EnemyCollisionSound(nullptr), EasterEgg(nullptr) {}
+    MyEngineSystem();
+    void loadEnemyTextures();
+    void loadEnemyDeathTextures();
     void initializeEnemyPositions(const std::vector<std::vector<int>>& maze, const Point2& boxPos, int minDistance, int numEnemies);
+    void updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives);
+    void handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<EnemyState>& enemies);
+    void renderEnemies(std::shared_ptr<GraphicsEngine> gfx, int cellSize) const;
+
     void spawnEasterEgg(const std::vector<std::vector<int>>& maze, int cellSize);
     void handleEasterEggCollection(const SDL_Rect& box, int& score);
     bool shouldDisplayEasterEggMessage() const;
@@ -73,8 +97,5 @@ public:
     bool isEasterEggCollected() const;
     void renderEasterEgg(std::shared_ptr<GraphicsEngine> gfx) const;
     void renderEasterEggMessage(std::shared_ptr<GraphicsEngine> gfx) const;
-    void updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives, Mix_Chunk* EnemyCollisionSound);
-    void renderEnemies(std::shared_ptr<GraphicsEngine> gfx, int cellSize) const;
-    void handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions, Mix_Chunk* EnemycollisionSound);
 };
 #endif // __MY_ENGINE_H__

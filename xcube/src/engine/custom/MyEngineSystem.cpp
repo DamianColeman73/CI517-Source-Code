@@ -3,18 +3,49 @@
 #include "../../demo/MyGame.h"
 #include "../ResourceManager.h"
 
-bool operator==(const Point2& lhs, const Point2& rhs) { // Add the operator== for Point2 here
+bool operator==(const Point2& lhs, const Point2& rhs) { 
     return lhs.x == rhs.x && lhs.y == rhs.y;
+}
+
+void MyEngineSystem::loadEnemyTextures() {
+    for (int i = 0; i < 6; ++i) {
+        // This material is licensed under the Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+        // Original Creator: PiXeRaT
+        // Source: https://opengameart.org/content/round-ghost
+        // Attribution: PiXeRaT (https://opengameart.org/users/pixerat)
+        // No substantive changes were made; only file names were adjusted for organizational purposes.
+        std::string texturePath = "../res/images/enemy/round ghost walk animation/sprite_" + std::to_string(i) + ".png";
+        enemyTextures[i] = ResourceManager::loadTexture(texturePath, SDL_Color{ 0, 0, 0, 0 });
+    }
+}
+
+void MyEngineSystem::loadEnemyDeathTextures() {
+    for (int i = 0; i < 5; ++i) {
+        // This material is licensed under the Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+        // Original Creator: PiXeRaT
+        // Source: https://opengameart.org/content/round-ghost
+        // Attribution: PiXeRaT (https://opengameart.org/users/pixerat)
+        // No substantive changes were made; only file names were adjusted for organizational purposes.
+        std::string texturePath = "../res/images/enemy/round ghost dead animation/sprite_" + std::to_string(i) + ".png";
+        enemyDeathTextures[i] = ResourceManager::loadTexture(texturePath, SDL_Color{ 0, 0, 0, 0 });
+    }
+}
+
+MyEngineSystem::MyEngineSystem() : enemyMoveCooldown(10), enemyMoveCooldownCounter(0), EnemyCollisionSound(nullptr), EasterEgg(nullptr) {
+    EasterEggTexture = ResourceManager::loadTexture("../res/images/Egg2_Frostwindz_ItchIo.png", SDL_Color{ 0, 0, 0, 0 });
+    loadEnemyTextures();
+    loadEnemyDeathTextures();
+    EnemyCollisionSound = ResourceManager::loadSound("../res/sounds/DamageSoundEffect_Raclure_FreeSoundOrg.mp3");
+    EasterEgg = ResourceManager::loadSound("../res/sounds/ConfirmationDownward_OriginalSound_FreeSoundOrg.wav");
+    enemyDirections.resize(0); // Initialize the directions array
 }
 
 void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>>& maze, const Point2& boxPos, int minDistance, int numEnemies) {
     srand(static_cast<unsigned int>(time(0)));
-    enemyPositions.clear();
+    enemies.clear();
     enemyPaths.clear();
     enemyPathIndices.clear();
     enemyMoveCounters.clear(); // Initialize the move counters
-    EnemyCollisionSound = ResourceManager::loadSound("../res/sounds/DamageSoundEffect_Raclure_FreeSoundOrg.mp3");
-    EasterEgg = ResourceManager::loadSound("../res/sounds/ConfirmationDownward_OriginalSound_FreeSoundOrg.wav");
 
     auto isTooClose = [](const Point2& a, const Point2& b) {
         return std::abs(a.x - b.x) <= 1 && std::abs(a.y - b.y) <= 1;
@@ -23,7 +54,6 @@ void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>
     for (int i = 0; i < numEnemies; ++i) {
         Point2 newPos;
         bool validPosition;
-
         do {
             validPosition = true;
             int row = rand() % (maze.size() - 2) + 1; // Avoid edges
@@ -34,16 +64,15 @@ void MyEngineSystem::initializeEnemyPositions(const std::vector<std::vector<int>
                 validPosition = false;
             }
             else {
-                for (const auto& pos : enemyPositions) {
-                    if (isTooClose(pos, newPos) || pos == newPos) {
+                for (const auto& enemy : enemies) {
+                    if (isTooClose(enemy.position, newPos) || enemy.position == newPos) {
                         validPosition = false;
                         break;
                     }
                 }
             }
         } while (!validPosition);
-
-        enemyPositions.push_back(newPos); // Add the new valid position to the list
+        enemies.push_back({ newPos, 0, false, 0, 0 }); // Add the new valid position to the list
         enemyPaths.push_back({});
         enemyPathIndices.push_back(0);
         enemyMoveCounters.push_back(0); // Initialize the move counter for each enemy
@@ -88,12 +117,10 @@ std::vector<Point2> MyEngineSystem::findPath(const Point2& start, const Point2& 
             if (neighbor.x < 0 || neighbor.x >= maze[0].size() || neighbor.y < 0 || neighbor.y >= maze.size() || maze[neighbor.y][neighbor.x] == 1) {
                 continue;
             }
-
             int neighborHash = hash(neighbor);
             if (closedSet.find(neighborHash) != closedSet.end()) {
                 continue;
             }
-
             int tentativeGCost = current->gCost + 1;
             if (allNodes.find(neighborHash) == allNodes.end() || tentativeGCost < allNodes[neighborHash]->gCost) {
                 Node* neighborNode = new Node(neighbor, tentativeGCost, heuristic(neighbor, goal), current);
@@ -102,7 +129,6 @@ std::vector<Point2> MyEngineSystem::findPath(const Point2& start, const Point2& 
             }
         }
     }
-
     for (auto& pair : allNodes) delete pair.second;
     return {};
 }
@@ -117,12 +143,14 @@ std::vector<Point2> MyEngineSystem::reconstructPath(Node* node) {
     return path;
 }
 
-void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives, Mix_Chunk* EnemycollisionSound) {
+void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::vector<int>>& maze, int cellSize, SDL_Rect& Box, int& lives) {
     enemyMoveCooldownCounter++;
     if (enemyMoveCooldownCounter >= enemyMoveCooldown) {
-        for (size_t i = 0; i < enemyPositions.size(); ++i) {
-            enemyPaths[i] = findPath(enemyPositions[i], boxPos, maze); // Recalculate the path to the player position at every update cycle
-            enemyPathIndices[i] = 0;
+        for (size_t i = 0; i < enemies.size(); ++i) {
+            if (!enemies[i].isDead) {
+                enemyPaths[i] = findPath(enemies[i].position, boxPos, maze); // Recalculate the path to the player position at every update cycle
+                enemyPathIndices[i] = 0;
+            }
         }
         enemyMoveCooldownCounter = 0;
     }
@@ -139,93 +167,160 @@ void MyEngineSystem::updateEnemies(const Point2& boxPos, const std::vector<std::
         return std::abs(pos.x - playerPos.x) <= 2 && std::abs(pos.y - playerPos.y) <= 2;
         };
 
-    std::vector<size_t> enemyIndices(enemyPositions.size()); // Sort enemies based on their distance to the player
+    std::vector<size_t> enemyIndices(enemies.size()); // Sort enemies based on their distance to the player
     std::iota(enemyIndices.begin(), enemyIndices.end(), 0);
     std::sort(enemyIndices.begin(), enemyIndices.end(), [&](size_t a, size_t b) {
-        return heuristic(enemyPositions[a], boxPos) < heuristic(enemyPositions[b], boxPos);
+        return heuristic(enemies[a].position, boxPos) < heuristic(enemies[b].position, boxPos);
         });
 
-    for (size_t i : enemyIndices) {
-        enemyMoveCounters[i]++;
-        if (enemyMoveCounters[i] >= ENEMY_MOVE_COOLDOWN) { // Use a consistent movement cooldown for all enemies
-            if (!enemyPaths[i].empty() && enemyPathIndices[i] < enemyPaths[i].size()) {
-                Point2 nextPos = enemyPaths[i][enemyPathIndices[i]];
-                bool canMove = true;
+    std::vector<size_t> enemiesToRemove;
 
-                for (size_t j = 0; j < enemyPositions.size(); ++j) { // Check if the next position is the same as or too close to any other enemy's current or next position
-                    if (i != j) {
-                        Point2 otherNextPos = (enemyPathIndices[j] < enemyPaths[j].size()) ? enemyPaths[j][enemyPathIndices[j]] : enemyPositions[j];
-                        if (isSamePosition(nextPos, enemyPositions[j]) || isSamePosition(nextPos, otherNextPos) || isTooClose(nextPos, enemyPositions[j])) {
-                            canMove = false;
-                            break;
+    for (size_t i : enemyIndices) {
+        auto& enemy = enemies[i];
+        if (!enemy.isDead) {
+            enemyMoveCounters[i]++;
+            if (enemyMoveCounters[i] >= ENEMY_MOVE_COOLDOWN) { // Use a consistent movement cooldown for all enemies
+                if (!enemyPaths[i].empty() && enemyPathIndices[i] < enemyPaths[i].size()) {
+                    Point2 nextPos = enemyPaths[i][enemyPathIndices[i]];
+                    bool canMove = true;
+
+                    for (size_t j = 0; j < enemies.size(); ++j) { // Check if the next position is the same as or too close to any other enemy's current or next position
+                        if (i != j) {
+                            Point2 otherNextPos = (enemyPathIndices[j] < enemyPaths[j].size()) ? enemyPaths[j][enemyPathIndices[j]] : enemies[j].position;
+                            if (isSamePosition(nextPos, enemies[j].position) || isSamePosition(nextPos, otherNextPos) || isTooClose(nextPos, enemies[j].position)) {
+                                canMove = false;
+                                break;
+                            }
                         }
                     }
+
+                    if (canMove || isNearPlayer(enemy.position, boxPos)) { // Allow movement if the enemy is near the player or if it is prioritized
+                        if (nextPos.x > enemy.position.x) {
+                            enemy.direction = 0; // Right
+                            enemy.lastHorizontalDirection = 0; // Update direction based on movement
+                        }
+                        else if (nextPos.x < enemy.position.x) {
+                            enemy.direction = 1; // Left
+                            enemy.lastHorizontalDirection = 1;
+                        }
+                        else if (nextPos.y > enemy.position.y) {
+                            enemy.direction = 2; // Down
+                        }
+                        else if (nextPos.y < enemy.position.y) {
+                            enemy.direction = 3; // Up
+                        }
+
+                        enemy.position = nextPos;
+                        enemyPathIndices[i]++;
+                    }
+                    else {
+                        enemyMoveCounters[i] = ENEMY_MOVE_COOLDOWN - 1; // If the enemy cannot move, prioritize the next enemy in the round-robin
+                    }
                 }
-
-                if (canMove || isNearPlayer(enemyPositions[i], boxPos)) { // Allow movement if the enemy is near the player or if it is prioritized
-                    enemyPositions[i] = nextPos;
-                    enemyPathIndices[i]++;
-                } else {
-                    enemyMoveCounters[i] = ENEMY_MOVE_COOLDOWN - 1; // If the enemy cannot move, prioritize the next enemy in the round-robin
-                  }
+                enemyMoveCounters[i] = 0; // Reset the move counter for the enemy
             }
-            enemyMoveCounters[i] = 0; // Reset the move counter for the enemy
-        }
 
-        for (size_t j = 0; j < enemyPositions.size(); ++j) { // Check if enemies are stuck together and move them apart
-            if (i != j && isTooClose(enemyPositions[i], enemyPositions[j])) {
-                if (enemyPositions[i].x < enemyPositions[j].x) { // Move enemy i away from enemy j
-                    enemyPositions[i].x--;
-                } else if (enemyPositions[i].x > enemyPositions[j].x) {
-                    enemyPositions[i].x++;
-                  }
-                if (enemyPositions[i].y < enemyPositions[j].y) {
-                    enemyPositions[i].y--;
-                } else if (enemyPositions[i].y > enemyPositions[j].y) {
-                    enemyPositions[i].y++;
-                  }
+            enemy.animationCounter++; // Update animation frame
+            if (enemy.animationCounter >= 10) { // speed of the animation
+                enemy.animationFrame = (enemy.animationFrame + 1) % EnemyState::ANIMATION_FRAME_COUNT; // Loop through frames 0 to 5
+                enemy.animationCounter = 0;
             }
+
+            for (size_t j = 0; j < enemies.size(); ++j) { // Check if enemies are stuck together and move them apart
+                if (i != j && isTooClose(enemy.position, enemies[j].position)) {
+                    if (enemy.position.x < enemies[j].position.x) {
+                        enemy.position.x--;
+                    }
+                    else if (enemy.position.x > enemies[j].position.x) {
+                        enemy.position.x++;
+                    }
+                    if (enemy.position.y < enemies[j].position.y) {
+                        enemy.position.y--;
+                    }
+                    else if (enemy.position.y > enemies[j].position.y) {
+                        enemy.position.y++;
+                    }
+                }
+            }
+
+            std::cout << "Enemy " << i << " at (" << enemy.position.x << ", " << enemy.position.y << "), Move Counter: " << enemyMoveCounters[i] << "\n";
         }
-
-        std::cout << "Enemy " << i << " at (" << enemyPositions[i].x << ", " << enemyPositions[i].y << "), Move Counter: " << enemyMoveCounters[i] << "\n"; // Debug logging
-    }
-    handlePlayerEnemyCollision(Box, lives, enemyPositions, EnemyCollisionSound); // Pass the collision sound
-}
-
-void MyEngineSystem::handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<Point2>& enemyPositions, Mix_Chunk* EnemyCollisionSound) {
-    std::vector<size_t> enemiesToRemove;
-    for (size_t i = 0; i < enemyPositions.size(); ++i) {
-        SDL_Rect enemyRect = { enemyPositions[i].x * CELL_SIZE, enemyPositions[i].y * CELL_SIZE, CELL_SIZE, CELL_SIZE };
-        if (SDL_HasIntersection(&Box, &enemyRect)) {
-            std::cout << "Collision detected with enemy at (" << enemyPositions[i].x << ", " << enemyPositions[i].y << ")\n";
-            enemiesToRemove.push_back(i);
-            lives--;
-            Mix_PlayChannel(-1, EnemyCollisionSound, 0); // Play the collision sound
-
-            if (lives <= 0) {
-                std::cout << "Game Over: Player has no more lives.\n";
-                // Handle game over logic
-                break;
+        else {
+            enemy.deathAnimationCounter++;
+            if (enemy.deathAnimationCounter >= DEATH_ANIMATION_COOLDOWN) {
+                enemy.deathAnimationFrame++;
+                enemy.deathAnimationCounter = 0;
+            }
+            if (enemy.deathAnimationFrame >= 5) {
+                enemiesToRemove.push_back(i);
             }
         }
     }
+
     for (auto it = enemiesToRemove.rbegin(); it != enemiesToRemove.rend(); ++it) { // Remove enemies after the loop to avoid modifying the vector while iterating
-        std::cout << "Removing enemy at index " << *it << " with position (" << enemyPositions[*it].x << ", " << enemyPositions[*it].y << ")\n";
-        enemyPositions.erase(enemyPositions.begin() + *it);
+        std::cout << "Removing enemy at index " << *it << " with position (" << enemies[*it].position.x << ", " << enemies[*it].position.y << ")\n";
+        enemies.erase(enemies.begin() + *it);
         enemyPaths.erase(enemyPaths.begin() + *it);
         enemyPathIndices.erase(enemyPathIndices.begin() + *it);
         enemyMoveCounters.erase(enemyMoveCounters.begin() + *it);
     }
+    handlePlayerEnemyCollision(Box, lives, enemies);
+}
+
+void MyEngineSystem::handlePlayerEnemyCollision(SDL_Rect& Box, int& lives, std::vector<EnemyState>& enemies) {
+    for (auto& enemy : enemies) {
+        if (!enemy.isDead) {
+            SDL_Rect enemyRect = { enemy.position.x * CELL_SIZE, enemy.position.y * CELL_SIZE, CELL_SIZE, CELL_SIZE };
+            if (SDL_HasIntersection(&Box, &enemyRect)) {
+                std::cout << "Collision detected with enemy at (" << enemy.position.x << ", " << enemy.position.y << ")\n";
+                enemy.isDead = true;
+                enemy.deathAnimationFrame = 0;
+                enemy.deathAnimationCounter = 0;
+                lives--;
+                Mix_PlayChannel(-1, EnemyCollisionSound, 0); // Play the collision sound
+                if (lives <= 0) {
+                    std::cout << "Game Over: Player has no more lives.\n";
+                    break;
+                }
+            }
+        }
+    }
 }
 
 void MyEngineSystem::renderEnemies(std::shared_ptr<GraphicsEngine> gfx, int cellSize) const {
-    for (size_t i = 0; i < enemyPositions.size(); ++i) {
-        const auto& enemyPos = enemyPositions[i];
-        gfx->setDrawColor(SDL_COLOR_BLACK);
-        gfx->drawRect(enemyPos.x * cellSize - 1, enemyPos.y * cellSize - 1, cellSize + 2, cellSize + 2); // Border
-        gfx->setDrawColor(SDL_COLOR_RED);
-        gfx->fillRect(enemyPos.x * cellSize, enemyPos.y * cellSize, cellSize, cellSize);
-        std::cout << "Rendering enemy " << i << " at (" << enemyPos.x << ", " << enemyPos.y << ")\n"; // Debug logging
+    for (const auto& enemy : enemies) {
+        SDL_Rect srcRect = { 0, 0, 40, 25 }; // Update source rectangle dimensions to 40x25
+        int enemyWidth = static_cast<int>(40 * 0.95); 
+        int enemyHeight = static_cast<int>(25 * 0.95);
+        SDL_Rect dstRect = { enemy.position.x * cellSize + (cellSize - enemyWidth) / 2, enemy.position.y * cellSize + (cellSize - enemyHeight) / 2, enemyWidth, enemyHeight };
+
+        if (enemy.isDead) {
+            if (enemy.deathAnimationFrame < 5) {
+                gfx->drawTexture(enemyDeathTextures[enemy.deathAnimationFrame], &srcRect, &dstRect);
+            }
+        }
+        else {
+            SDL_RendererFlip flip = SDL_FLIP_NONE;
+            int textureIndex = enemy.animationFrame; // Use the animation frame for the texture index
+            if (enemy.direction == 0) {
+                flip = SDL_FLIP_HORIZONTAL; // Right
+            }
+            else if (enemy.direction == 1) {
+                flip = SDL_FLIP_NONE; // Left
+            }
+            else if (enemy.direction == 2 || enemy.direction == 3) {
+                // Use the animation frame for up and down directions as well
+                textureIndex = enemy.animationFrame;
+                if (enemy.lastHorizontalDirection == 0) {
+                    flip = SDL_FLIP_HORIZONTAL; // Right
+                }
+                else {
+                    flip = SDL_FLIP_NONE; // Left
+                }
+            }
+            gfx->drawTexture(enemyTextures[textureIndex], &srcRect, &dstRect, 0.0, nullptr, flip);
+        }
+        std::cout << "Rendering enemy at (" << enemy.position.x << ", " << enemy.position.y << ")\n"; // Debug logging
     }
 }
 
@@ -255,18 +350,19 @@ bool MyEngineSystem::shouldDisplayEasterEggMessage() const {
     return easterEgg.isCollected && (SDL_GetTicks() - easterEgg.messageTimer < easterEgg.MESSAGE_DURATION);
 }
 
-Point2 MyEngineSystem::getEasterEggPosition() const {
-    return easterEgg.pos;
-}
+Point2 MyEngineSystem::getEasterEggPosition() const { return easterEgg.pos; }
 
-bool MyEngineSystem::isEasterEggCollected() const {
-    return easterEgg.isCollected;
-}
+bool MyEngineSystem::isEasterEggCollected() const { return easterEgg.isCollected; }
 
 void MyEngineSystem::renderEasterEgg(std::shared_ptr<GraphicsEngine> gfx) const {
     if (!easterEgg.isCollected) {
-        gfx->setDrawColor(SDL_COLOR_PURPLE);
-        gfx->fillRect(easterEgg.pos.x - 10, easterEgg.pos.y - 10, 20, 20);
+        int originalEggWidth, originalEggHeight; // Size of the Easter egg
+        SDL_QueryTexture(EasterEggTexture, NULL, NULL, &originalEggWidth, &originalEggHeight);
+        int eggWidth = static_cast<int>(originalEggWidth * 0.60); // New width of the Easter egg (60% of the original size)
+        int eggHeight = static_cast<int>(originalEggHeight * 0.60); // New height of the Easter egg (60% of the original size)
+        SDL_Rect srcRect = { 0, 0, originalEggWidth, originalEggHeight }; // Source rectangle for the texture
+        SDL_Rect dstRect = { easterEgg.pos.x - eggWidth / 2, easterEgg.pos.y - eggHeight / 2, eggWidth, eggHeight }; // Destination rectangle to center the Easter egg at its position
+        gfx->drawTexture(EasterEggTexture, &srcRect, &dstRect);
     }
 }
 
