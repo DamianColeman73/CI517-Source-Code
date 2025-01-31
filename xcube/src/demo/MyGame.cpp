@@ -1,7 +1,7 @@
 //You should only modify this MyGame.cpp / MyGame.h / MyEngineSystem.cpp / MyEngineSystem.h
 #include "MyGame.h"
 
-MyGame::MyGame() : AbstractGame(), score(0), lives(10), numKeys(10), gameWon(false), gameOver(false), quitGame(false), doorVisible(false), doorSoundPlayed(false), doorOpening(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 }, playAgainButton{ 610, 440, 180, 45 }, door{ 540, 30, 30, 30 }, playerFrameIndex(0), playerFrameTimer(0), isIdle(true), isDead(false), idleFrameIndex(0), idleFrameTimer(0), deadFrameIndex(0), deadFrameTimer(0), deadAnimationDelay(0), facingRight(true) {
+MyGame::MyGame() : AbstractGame(), score(0), lives(3), numKeys(10), gameWon(false), gameOver(false), quitGame(false), doorVisible(false), doorSoundPlayed(false), doorOpening(false), box{ 30, 30, 30, 30 }, quitButton{ 640, 500, 120, 40 }, playAgainButton{ 610, 440, 180, 45 }, door{ 540, 30, 30, 30 }, playerFrameIndex(0), playerFrameTimer(0), isIdle(true), isDead(false), idleFrameIndex(0), idleFrameTimer(0), deadFrameIndex(0), deadFrameTimer(0), deadAnimationDelay(0), facingRight(true) {
     TTF_Font* font = ResourceManager::loadFont("res/fonts/arial.ttf", 35);
     gfx->useFont(font);
     originalFont = font; // Store the original font
